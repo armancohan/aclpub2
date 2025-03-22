@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-from aclpub2.generate import generate_proceedings, generate_handbook
+
+from aclpub2.generate import generate_handbook, generate_proceedings
 
 if __name__ == "__main__":
     print("======================================================")
@@ -13,16 +14,10 @@ if __name__ == "__main__":
     print("Generate proceedings for *CL Conferences and Workshops")
     print("======================================================")
 
-    parser = argparse.ArgumentParser(
-        description="Generate proceedings from an input direcotry."
-    )
+    parser = argparse.ArgumentParser(description="Generate proceedings from an input direcotry.")
     parser.add_argument("path", type=str, help="Path to directory containing inputs.")
-    parser.add_argument(
-        "--proceedings", action="store_true", help="If set, generates the proceedings."
-    )
-    parser.add_argument(
-        "--handbook", action="store_true", help="If set, generates the handbook."
-    )
+    parser.add_argument("--proceedings", action="store_true", help="If set, generates the proceedings.")
+    parser.add_argument("--handbook", action="store_true", help="If set, generates the handbook.")
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -44,9 +39,15 @@ if __name__ == "__main__":
         default="output",
         help="Directory to write final, ACL Anthology compatible generation outputs to.",
     )
+    parser.add_argument(
+        "--no-multiprocessing",
+        action="store_true",
+        default=False,
+        help="If set, uses multiprocessing to generate the proceedings.",
+    )
 
     args = parser.parse_args()
-    if args.proceedings == True:
-        generate_proceedings(args.path, args.overwrite, args.outdir, args.nopax, args.frontmatter)
-    if args.handbook == True:
+    if args.proceedings:
+        generate_proceedings(args.path, args.overwrite, args.outdir, args.nopax, args.frontmatter, not args.no_multiprocessing)
+    if args.handbook:
         generate_handbook(args.path, args.overwrite)

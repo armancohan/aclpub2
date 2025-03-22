@@ -18,7 +18,7 @@ from aclpub2.templates import TEMPLATE_DIR, homoglyph, load_template
 PARENT_DIR = Path(__file__).parent
 
 
-def generate_proceedings(path: str, overwrite: bool, outdir: str, nopax: bool, frontmatter: bool):
+def generate_proceedings(path: str, overwrite: bool, outdir: str, nopax: bool, frontmatter: bool, use_multiprocessing: bool = True):
     root = Path(path)
     build_dir = Path("build")
     build_dir.mkdir(exist_ok=True)
@@ -115,7 +115,7 @@ def generate_proceedings(path: str, overwrite: bool, outdir: str, nopax: bool, f
         )
         return
 
-    generate_watermarked_pdfs(id_to_paper.values(), conference, root)
+    generate_watermarked_pdfs(id_to_paper.values(), conference, root, use_multiprocessing)
     rendered_template = template.render(
         root=str(root),
         conference=conference,
@@ -368,21 +368,31 @@ def error_handler(e):
     )
 
 
-def generate_watermarked_pdfs(papers_with_pages, conference, root: Path):
+def generate_watermarked_pdfs(papers_with_pages, conference, root: Path, use_multiprocessing: bool = True):
     build_dir = Path("build")
     watermarked_pdfs = Path(build_dir, "watermarked_pdfs")
     watermarked_pdfs.mkdir(exist_ok=True)
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+
+    if use_multiprocessing:
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+            for paper in papers_with_pages:
+                if "archival" in paper and not paper["archival"]:
+                    continue
+                pool.apply_async(
+                    create_watermarked_pdf,
+                    args=(paper, conference, root),
+                    error_callback=error_handler,
+                )
+            pool.close()
+            pool.join()
+    else:
         for paper in papers_with_pages:
             if "archival" in paper and not paper["archival"]:
                 continue
-            pool.apply_async(
-                create_watermarked_pdf,
-                args=(paper, conference, root),
-                error_callback=error_handler,
-            )
-        pool.close()
-        pool.join()
+            try:
+                create_watermarked_pdf(paper, conference, root)
+            except Exception as e:
+                error_handler(e)
 
 
 def create_watermarked_pdf(paper, conference, root: Path):
