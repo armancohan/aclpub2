@@ -1,18 +1,19 @@
+import glob
+import multiprocessing
+import os
+import shutil
+import subprocess
+import traceback
 from collections import defaultdict
 from pathlib import Path
-from PyPDF2 import PdfFileReader
 
-from aclpub2.templates import load_template, homoglyph, TEMPLATE_DIR
-from aclpub2.config import load_configs, load_configs_handbook
-
-import multiprocessing
-import subprocess
+import PyPDF2
 import roman
-import shutil
-import os
-import glob
-import traceback
 import yaml
+from PyPDF2 import PdfReader
+
+from aclpub2.config import load_configs, load_configs_handbook
+from aclpub2.templates import TEMPLATE_DIR, homoglyph, load_template
 
 PARENT_DIR = Path(__file__).parent
 
