@@ -370,9 +370,6 @@ def process_papers(papers, root: Path):
 
 def error_handler(e):
     print(traceback.print_exception(type(e), e, e.__traceback__))
-    input(
-        "\nSorry. I have problems compiling the watermarked papers. Press Enter to process another paper or Ctrl+C to quit.\n"
-    )
 
 
 def generate_watermarked_pdfs(papers_with_pages, conference, root: Path, use_multiprocessing: bool = True):
