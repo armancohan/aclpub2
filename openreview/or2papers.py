@@ -8,16 +8,18 @@
 # ---------------------------------------------------------------------------
 
 import argparse
-import openreview
 import os
+import sys
+
 import yaml
 from tqdm import tqdm
-import sys
 from util import *
+
+import openreview
 import openreview.api
 
 
-def main(username, password, venue, download_all, download_pdfs):
+def main(username, password, venue, download_all, download_pdfs, output_dir):
     try:
         client_acl_v2 = openreview.api.OpenReviewClient(
             baseurl="https://api2.openreview.net", username=username, password=password
@@ -27,7 +29,8 @@ def main(username, password, venue, download_all, download_pdfs):
         exit()
 
     try:
-        client_acl_v2.get_group(venue)
+        venue_name = venue + "/Publication_Chairs"
+        client_acl_v2.get_group(venue_name)
     except Exception as e:
         print(f"Unable to get group for: {venue}\nSee below for the OpenReview API error")
         print(f"Exception: {e}")
@@ -38,27 +41,25 @@ def main(username, password, venue, download_all, download_pdfs):
 
     attachment_types = {"software": "software", "data": "data", "copyright_PDF": "copyright"}
 
-    papers_folder = "papers"
-    attachments_folder = "attachments"
-    if not os.path.exists(papers_folder):
-        os.mkdir(papers_folder)
-    if not os.path.exists(attachments_folder):
-        os.mkdir(attachments_folder)
+    papers_folder = os.path.join(output_dir, "papers")
+    attachments_folder = os.path.join(output_dir, "attachments")
+    os.makedirs(papers_folder, exist_ok=True)
+    os.makedirs(attachments_folder, exist_ok=True)
 
-    submissions = client_acl_v2.get_all_notes(content={ 'venueid': venue}, details='replies')
+    venue_name = venue + "/-/Submission"
+    submissions = client_acl_v2.get_all_notes(invitation=venue_name, details="replies")
     if len(submissions) <= 0:
         print("No submissions found. Please double check your venue ID and/or permissions to view the submissions")
 
     ## Publication chairs do not have access to the forum replies - use venueid instead
     if len(submissions[0].details["replies"]) <= 0:
-        decision_by_forum = {
-            s.forum: s
-            for s in submissions if s.content["venueid"]["value"] == venue
-        }
+        decision_by_forum = {s.forum: s for s in submissions if s.content["venueid"]["value"] == venue}
     else:
         decision_by_forum = {
             r["forum"]: r
-            for s in submissions for r in s.details["replies"] if any(i.endswith("Decision") for i in r["invitations"])
+            for s in submissions
+            for r in s.details["replies"]
+            if any(i.endswith("Decision") for i in r["invitations"])
             if "accept" in r["content"]["decision"]["value"].lower()
         }
 
@@ -94,7 +95,9 @@ def main(username, password, venue, download_all, download_pdfs):
             abstract = ""
             if not abstract_flag:
                 abstract_flag = True
-                print(f"Paper {submission.id} abstract field is not present. Contact info@openreview.net if you need this information migrated from ARR")
+                print(
+                    f"Paper {submission.id} abstract field is not present. Contact info@openreview.net if you need this information migrated from ARR"
+                )
 
         paper = {
             "id": submission.number,  # len(papers)+1,
@@ -108,12 +111,12 @@ def main(username, password, venue, download_all, download_pdfs):
         }
 
         # Fetch paper attributes and attachments.
-        submitted_area = (
-            get_content_from(submission, "track")
-        )
+        submitted_area = get_content_from(submission, "track")
         if "track" not in submission.content and not track_flag:
             track_flag = True
-            print(f"Paper {submission.id} track field is not present. Contact info@openreview.net if you need this information migrated from ARR")
+            print(
+                f"Paper {submission.id} track field is not present. Contact info@openreview.net if you need this information migrated from ARR"
+            )
 
         if "paper_type" in submission.content:
             paper_type = " ".join(get_content_from(submission, "paper_type").split()[:2]).lower()
@@ -121,7 +124,9 @@ def main(username, password, venue, download_all, download_pdfs):
             paper_type = "N/A"
             if not paper_type_flag:
                 paper_type_flag = True
-                print("paper_type field (long or short) is not present. Contact info@openreview.net if you need this information migrated from ARR")
+                print(
+                    "paper_type field (long or short) is not present. Contact info@openreview.net if you need this information migrated from ARR"
+                )
         presentation_type = "N/A"
         paper["attributes"] = {
             "submitted_area": submitted_area,
@@ -143,29 +148,26 @@ def main(username, password, venue, download_all, download_pdfs):
                 attachments.append(
                     {
                         "type": attachment_types[att_type],
-                        "file": str(paper["id"]) + suffix
-                        + "."
-                        + str(get_content_from(submission, att_type).split(".")[-1]),
+                        "file": str(paper["id"]) + suffix + "." + str(get_content_from(submission, att_type).split(".")[-1]),
                         "open_review_id": str(get_content_from(submission, att_type)),
                     }
                 )
                 if download_all:
                     file_tye = get_content_from(submission, att_type).split(".")[-1]
-                    f = client_acl_v2.get_attachment(submission.id, att_type)
-                    with open(
-                        os.path.join(
-                            attachments_folder, str(paper["id"]) + suffix + "." + file_tye
-                        ),
-                        "wb",
-                    ) as op:
-                        op.write(f)
+                    try:
+                        f = client_acl_v2.get_attachment(submission.id, att_type)
+                        with open(
+                            os.path.join(attachments_folder, str(paper["id"]) + suffix + "." + file_tye),
+                            "wb",
+                        ) as op:
+                            op.write(f)
+                    except openreview.openreview.OpenReviewException:
+                        print(f"Unable to download attachment type {att_type} for {paper['openreview_id']}")
                 attachments_count = attachments_count + 1
         if download_pdfs:
             try:
                 f = client_acl_v2.get_pdf(id=paper["openreview_id"])
-                with open(
-                    os.path.join(papers_folder, str(paper["id"]) + ".pdf"), "wb"
-                ) as op:
+                with open(os.path.join(papers_folder, str(paper["id"]) + ".pdf"), "wb") as op:
                     op.write(f)
             except:
                 print(f"Unable to download PDF for {paper['openreview_id']}")
@@ -178,19 +180,25 @@ def main(username, password, venue, download_all, download_pdfs):
     small_log.close()
 
     papers.sort(key=lambda p: p["id"])
-    yaml.dump(papers, open("papers.yml", "w"), allow_unicode=True)
+    yaml.dump(papers, open(os.path.join(output_dir, "papers.yml"), "w"), allow_unicode=True)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Fetch papers from an OpenReview venue."
-    )
+    parser = argparse.ArgumentParser(description="Fetch papers from an OpenReview venue.")
     parser.add_argument("username", type=str, help="OpenReview username.")
     parser.add_argument("password", type=str, help="OpenReview password.")
     parser.add_argument(
         "venue",
         type=str,
-        help="OpenReview venue ID, found in the URL https://openreview.net/group?id=<VENUE ID>",
+        help="OpenReview venue ID, found in the URL https://openreview.net/group?id=<VENUE ID>"
+        "Example: aclweb.org/NAACL/2025/Conference/",
+        default="aclpub2025",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Output directory.",
+        default=".",
     )
     parser.add_argument(
         "--all",
@@ -203,4 +211,4 @@ if __name__ == "__main__":
         help="If set, downloads PDFs.",
     )
     args = parser.parse_args()
-    main(args.username, args.password, args.venue, args.all, args.pdfs)
+    main(args.username, args.password, args.venue, args.all, args.pdfs, args.output_dir)
