@@ -335,10 +335,17 @@ def process_papers(papers, root: Path):
         if "file" not in paper:
             raise ValueError(f"missing 'file' in paper {paper['id']}")
         pdf_path = Path(root, "papers", paper["file"])
-        pdf = PdfFileReader(str(pdf_path))
-        paper["num_pages"] = pdf.getNumPages()
+        try:
+            pdf = PdfReader(str(pdf_path))
+        except PyPDF2.errors.PdfReadError:
+            print(f"Error reading {pdf_path}, skipping...")
+            continue
+        except FileNotFoundError:
+            print(f"File not found: {pdf_path}, skipping...")
+            continue
+        paper["num_pages"] = len(pdf.pages)
         paper["start_page"] = page
-        paper["end_page"] = page + pdf.getNumPages() - 1
+        paper["end_page"] = page + len(pdf.pages) - 1
         if "authors" not in paper:
             raise ValueError(f"missing 'authors' in paper {paper['id']}")
         for author in paper["authors"]:
@@ -351,7 +358,7 @@ def process_papers(papers, root: Path):
                 raise ValueError(f"missing 'last_name' in author of paper {paper['id']}")
             index_name = f"{author['last_name']}, {given_names}"
             author_to_pages[index_name].append(page)
-        page += pdf.getNumPages()
+        page += len(pdf.pages)
         archival_papers.append(paper)
     alphabetized_author_index = defaultdict(list)
     for author, pages in sorted(author_to_pages.items()):
